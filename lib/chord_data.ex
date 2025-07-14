@@ -186,6 +186,8 @@ defmodule ChordSubstituter.ChordData do
   def quality_abbreviations, do: @quality_abbreviations
 
   def get_intervals(quality) do
+    quality = if quality == "", do: "major", else: quality
+
     case Map.get(@interval_map, quality) do
       nil -> {:error, "Unknown chord quality: #{quality}"}
       intervals -> {:ok, intervals}

@@ -16,19 +16,15 @@ defmodule ChordSubstituter.Chord do
   }
 
   def new(root, quality) do
-    %Chord{root: root, quality: quality}
+    with {:ok, notes} <- notes("#{root} #{quality}") do
+      %Chord{root: root, quality: quality, notes: notes}
+    else
+      {:error, reason} -> {:error, reason}
+    end
   end
-
-  def from_string(string) do
-    case parse_root_and_quality(string) do
-      {root, ""} ->
-        {:ok, new(root, "major")}
-
-      {root, quality} ->
-        {:ok, new(root, quality)}
-
-      :error ->
-        {:error, "Invalid chord format"}
+  def new(chord_string) do
+    with {:ok, {root, quality}} <- parse_root_and_quality(chord_string) do
+      new(root, quality)
     end
   end
 
@@ -36,9 +32,9 @@ defmodule ChordSubstituter.Chord do
   Returns the notes of a chord given a chord string (e.g., "C major", "D minor").
   """
   def notes(chord_string) do
-    with {:ok, chord} <- from_string(chord_string),
-         {:ok, intervals} <- get_intervals(chord.quality),
-         {:ok, notes} <- build_notes(chord.root, intervals) do
+    with {:ok, {root, quality}} <- parse_root_and_quality(chord_string),
+         {:ok, intervals} <- get_intervals(quality),
+         {:ok, notes} <- build_notes(root, intervals) do
       {:ok, notes}
     else
       {:error, reason} -> {:error, reason}
@@ -47,6 +43,34 @@ defmodule ChordSubstituter.Chord do
 
   def notes_from_chord_array(chord_array) do
     Enum.map(chord_array, fn chord -> notes(chord) end)
+  end
+
+  @doc """
+  Finds all chords that contain the given pitches.
+
+  Accepts either a string of pitches (e.g., "CEG") or a list of pitch strings (e.g., ["C", "E", "G"]).
+  Returns a list of chord strings that contain all the given pitches.
+
+  Examples:
+    find_chords_with_pitches("CEG") -> ["C major", "C major7", "A minor7"]
+    find_chords_with_pitches(["C", "E#", "A", "E"]) -> ["F major7"]
+  """
+  def find_chords_with_pitches(pitches) when is_binary(pitches) do
+    pitches
+    |> parse_notes_from_string()
+    |> find_chords_with_pitches()
+  end
+
+  def find_chords_with_pitches(pitches) when is_list(pitches) do
+    normalized_pitches = Enum.map(pitches, &normalize_pitch/1)
+
+    unique_pitches = Enum.uniq(normalized_pitches)
+
+    if length(unique_pitches) < 2 do
+      []
+    else
+      chords_matching_pitches(unique_pitches)
+    end
   end
 
   defp get_intervals(quality) do
@@ -82,13 +106,13 @@ defmodule ChordSubstituter.Chord do
     case capture_chord_quality(string) do
       %{"quality" => quality, "root" => root} ->
         if is_valid_root?(root) do
-          {root, String.trim(quality)}
+          {:ok, {root, String.trim(quality)}}
         else
-          :error
+          {:error, "Unkown root note: #{root}"}
         end
 
       _ ->
-        :error
+        {:error, "Invalid chord format"}
     end
   end
 
@@ -104,34 +128,6 @@ defmodule ChordSubstituter.Chord do
   defp capture_notes(notes_string), do: Regex.scan(~r/([A-G][b#]?)/, notes_string, capture: :first)
 
   defp capture_chord_quality(chord_string), do: Regex.named_captures(~r/^(?<root>[A-G][b#]?)(?<quality>.*)$/, chord_string)
-
-  @doc """
-  Finds all chords that contain the given pitches.
-
-  Accepts either a string of pitches (e.g., "CEG") or a list of pitch strings (e.g., ["C", "E", "G"]).
-  Returns a list of chord strings that contain all the given pitches.
-
-  Examples:
-    find_chords_with_pitches("CEG") -> ["C major", "C major7", "A minor7"]
-    find_chords_with_pitches(["C", "E#", "A", "E"]) -> ["F major7"]
-  """
-  def find_chords_with_pitches(pitches) when is_binary(pitches) do
-    pitches
-    |> parse_notes_from_string()
-    |> find_chords_with_pitches()
-  end
-
-  def find_chords_with_pitches(pitches) when is_list(pitches) do
-    normalized_pitches = Enum.map(pitches, &normalize_pitch/1)
-
-    unique_pitches = Enum.uniq(normalized_pitches)
-
-    if length(unique_pitches) < 2 do
-      []
-    else
-      chords_matching_pitches(unique_pitches)
-    end
-  end
 
   defp chords_matching_pitches(pitches) do
     Enum.map(all_chords(), fn {name, notes} ->
