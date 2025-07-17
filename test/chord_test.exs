@@ -46,6 +46,12 @@ defmodule ChordSubstituter.ChordTest do
       assert "A minor7" in result
     end
 
+    test "finds exact chords from string input" do
+      result = Chord.find_chords_with_pitches("CEG", match_exact: true)
+      assert "C major" in result
+      assert "C major7" not in result
+    end
+
     test "finds chords from list input" do
       result = Chord.find_chords_with_pitches(["C", "E#", "A", "E"])
       assert "F major7" in result
@@ -58,12 +64,12 @@ defmodule ChordSubstituter.ChordTest do
 
     test "handles single pitch input" do
       result = Chord.find_chords_with_pitches("C")
-      assert result == []
+      assert result == {:error, "Insufficient unique pitches to match against."}
     end
 
     test "handles empty input" do
       result = Chord.find_chords_with_pitches([])
-      assert result == []
+      assert result == {:error, "Insufficient unique pitches to match against."}
     end
 
     test "handles duplicate pitches" do
@@ -191,7 +197,7 @@ defmodule ChordSubstituter.ChordTest do
     test "includes basic major and minor chords for all roots" do
       all_chords = Chord.all_chords()
       chord_names = Enum.map(all_chords, fn {chord_name, _notes} ->
-        Atom.to_string(chord_name)
+        chord_name
       end)
 
       assert "C major" in chord_names
@@ -203,7 +209,7 @@ defmodule ChordSubstituter.ChordTest do
     test "includes extended chords" do
       all_chords = Chord.all_chords()
       chord_names = Enum.map(all_chords, fn {chord_name, _notes} ->
-        Atom.to_string(chord_name)
+        chord_name
       end)
 
       assert Enum.any?(chord_names, &String.contains?(&1, "major7"))
@@ -215,7 +221,7 @@ defmodule ChordSubstituter.ChordTest do
       all_chords = Chord.all_chords()
 
       Enum.each(all_chords, fn {chord_name, notes} ->
-        assert is_atom(chord_name)
+        assert is_binary(chord_name)
         assert is_list(notes)
         assert Enum.all?(notes, &is_binary/1)
       end)
@@ -224,7 +230,7 @@ defmodule ChordSubstituter.ChordTest do
     test "generates chords for all 12 chromatic notes" do
       all_chords = Chord.all_chords()
       chord_names = Enum.map(all_chords, fn {chord_name, _notes} ->
-        Atom.to_string(chord_name)
+        chord_name
       end)
 
       chromatic_notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -238,7 +244,7 @@ defmodule ChordSubstituter.ChordTest do
   describe "edge cases and error handling" do
     test "handles case sensitivity in pitch finding" do
       result = Chord.find_chords_with_pitches("ceg")
-      assert result == []
+      assert result == {:error, "Insufficient unique pitches to match against."}
     end
 
     test "handles malformed note strings gracefully" do

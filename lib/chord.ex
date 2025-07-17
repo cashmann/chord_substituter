@@ -55,22 +55,37 @@ defmodule ChordSubstituter.Chord do
     find_chords_with_pitches("CEG") -> ["C major", "C major7", "A minor7"]
     find_chords_with_pitches(["C", "E#", "A", "E"]) -> ["F major7"]
   """
-  def find_chords_with_pitches(pitches) when is_binary(pitches) do
+  @pitch_match_defaults %{match_exact: false}
+  def find_chords_with_pitches(pitches, options \\ [])
+  def find_chords_with_pitches(pitches, options) when is_binary(pitches) do
     pitches
     |> parse_notes_from_string()
-    |> find_chords_with_pitches()
+    |> find_chords_with_pitches(options)
   end
 
-  def find_chords_with_pitches(pitches) when is_list(pitches) do
+  def find_chords_with_pitches(pitches, options) when is_list(pitches) do
+    %{match_exact: match_exact?} = Enum.into(options, @pitch_match_defaults)
+    requisite_pitch_count = if match_exact?, do: 3, else: 2
+
     normalized_pitches = Enum.map(pitches, &normalize_pitch/1)
 
     unique_pitches = Enum.uniq(normalized_pitches)
 
-    if length(unique_pitches) < 2 do
-      []
+    if length(unique_pitches) < requisite_pitch_count do
+      {:error, "Insufficient unique pitches to match against."}
     else
-      chords_matching_pitches(unique_pitches)
+      chords_matching_pitches(unique_pitches, match_exact?)
     end
+  end
+
+  def all_chords do
+    Enum.flat_map(@note_names, fn root ->
+      Enum.flat_map(ChordData.interval_map(), fn {quality, intervals} ->
+        {_, notes} = build_notes(root, intervals)
+
+        [{"#{root} #{quality}", notes}]
+      end)
+    end)
   end
 
   defp get_intervals(quality) do
@@ -108,7 +123,7 @@ defmodule ChordSubstituter.Chord do
         if is_valid_root?(root) do
           {:ok, {root, String.trim(quality)}}
         else
-          {:error, "Unkown root note: #{root}"}
+          {:error, "Unknown root note: #{root}"}
         end
 
       _ ->
@@ -129,21 +144,24 @@ defmodule ChordSubstituter.Chord do
 
   defp capture_chord_quality(chord_string), do: Regex.named_captures(~r/^(?<root>[A-G][b#]?)(?<quality>.*)$/, chord_string)
 
-  defp chords_matching_pitches(pitches) do
+  defp chords_matching_pitches(pitches, match_exact?) do
     Enum.map(all_chords(), fn {name, notes} ->
-      if Enum.all?(pitches, &Enum.member?(notes, &1)), do: Atom.to_string(name)
+      match? = if match_exact?, do: pitches_match_exactly?(notes, pitches), else: pitches_matching?(pitches, notes)
+      if match?, do: name
     end)
     |> Enum.reject(&is_nil(&1))
   end
 
-  def all_chords do
-    Enum.flat_map(@note_names, fn root ->
-      Enum.flat_map(ChordData.interval_map(), fn {quality, intervals} ->
-        {_, notes} = build_notes(root, intervals)
+  defp pitches_matching?(input_pitches, chord_notes) do
+    Enum.all?(input_pitches, &Enum.member?(chord_notes, &1))
+  end
 
-        %{"#{root} #{quality}": notes}
-      end)
-    end)
+  defp pitches_match_exactly?(chord_notes, input_pitches) do
+    if (length(chord_notes) == length(input_pitches)) do
+      pitches_matching?(input_pitches, chord_notes)
+    else
+      false
+    end
   end
 
   defp normalize_pitch(pitch) do
