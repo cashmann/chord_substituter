@@ -1,22 +1,10 @@
 defmodule ChordSubstituter.Chord do
   alias ChordSubstituter.Chord
   alias ChordSubstituter.ChordData
+  alias ChordSubstituter.MusicTheory
 
   defstruct root: nil, quality: nil, notes: nil
 
-  @note_names ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-  @enharmonic_equivalents %{
-    "Db" => "C#",
-    "Eb" => "D#",
-    "Gb" => "F#",
-    "Ab" => "G#",
-    "Bb" => "A#",
-    "E#" => "F",
-    "B#" => "C"
-  }
-
-  def note_names, do: @note_names
-  def enharmonic_equivalents, do: @enharmonic_equivalents
   def new(root, quality) do
     with {:ok, notes} <- notes("#{root} #{quality}") do
       %Chord{root: root, quality: quality, notes: notes}
@@ -69,7 +57,7 @@ defmodule ChordSubstituter.Chord do
     %{match_exact: match_exact?} = Enum.into(options, @pitch_match_defaults)
     requisite_pitch_count = if match_exact?, do: 3, else: 2
 
-    normalized_pitches = Enum.map(pitches, &normalize_pitch/1)
+    normalized_pitches = Enum.map(pitches, &MusicTheory.normalize_note/1)
 
     unique_pitches = Enum.uniq(normalized_pitches)
 
@@ -81,7 +69,7 @@ defmodule ChordSubstituter.Chord do
   end
 
   def all_chords do
-    Enum.flat_map(@note_names, fn root ->
+    Enum.flat_map(MusicTheory.note_names(), fn root ->
       Enum.flat_map(ChordData.interval_map(), fn {quality, intervals} ->
         {_, notes} = build_notes(root, intervals)
 
@@ -91,17 +79,14 @@ defmodule ChordSubstituter.Chord do
   end
 
   defp get_intervals(quality) do
-    quality = String.downcase(quality) |> String.trim()
-
-    full_quality = ChordData.expand_quality_abbreviation(quality)
-
+    normalized_quality = MusicTheory.normalize_quality(quality)
+    full_quality = ChordData.expand_quality_abbreviation(normalized_quality)
     ChordData.get_intervals(full_quality)
   end
 
 
   defp note_index(note) when is_binary(note) do
-    normalized_note = Map.get(@enharmonic_equivalents, note, note)
-    Enum.find_index(@note_names, &(&1 == normalized_note))
+    MusicTheory.note_index(note)
   end
 
   defp build_notes(root, intervals) do
@@ -112,7 +97,7 @@ defmodule ChordSubstituter.Chord do
       root_index ->
         notes =
           Enum.map(intervals, fn interval ->
-            Enum.at(@note_names, rem(root_index + interval, length(@note_names)))
+            Enum.at(MusicTheory.note_names(), rem(root_index + interval, length(MusicTheory.note_names())))
           end)
 
         {:ok, notes}
@@ -122,7 +107,7 @@ defmodule ChordSubstituter.Chord do
   defp parse_root_and_quality(string) do
     case capture_chord_quality(string) do
       %{"quality" => quality, "root" => root} ->
-        if is_valid_root?(root) do
+        if MusicTheory.valid_note?(root) do
           {:ok, {root, String.trim(quality)}}
         else
           {:error, "Unknown root note: #{root}"}
@@ -132,9 +117,6 @@ defmodule ChordSubstituter.Chord do
         {:error, "Invalid chord format"}
     end
   end
-
-  defp is_valid_root?(root),
-    do: Enum.member?(@note_names, root) or Map.has_key?(@enharmonic_equivalents, root)
 
   defp parse_notes_from_string(notes_string) do
     notes_string
@@ -164,9 +146,5 @@ defmodule ChordSubstituter.Chord do
     else
       false
     end
-  end
-
-  defp normalize_pitch(pitch) do
-    Map.get(@enharmonic_equivalents, pitch, pitch)
   end
 end
