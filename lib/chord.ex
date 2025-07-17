@@ -15,6 +15,8 @@ defmodule ChordSubstituter.Chord do
     "B#" => "C"
   }
 
+  def note_names, do: @note_names
+  def enharmonic_equivalents, do: @enharmonic_equivalents
   def new(root, quality) do
     with {:ok, notes} <- notes("#{root} #{quality}") do
       %Chord{root: root, quality: quality, notes: notes}
