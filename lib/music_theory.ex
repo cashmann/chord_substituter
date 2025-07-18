@@ -32,13 +32,13 @@ defmodule ChordSubstituter.MusicTheory do
 
   ## Examples
 
-      iex> MusicTheory.normalize_note("Db")
+      iex> MusicTheory.get_enharmonic_equivalent("Db")
       "C#"
 
-      iex> MusicTheory.normalize_note("C")
+      iex> MusicTheory.get_enharmonic_equivalent("C")
       "C"
   """
-  def normalize_note(note) do
+  def get_enharmonic_equivalent(note) do
     Map.get(@enharmonic_equivalents, note, note)
   end
 
@@ -55,23 +55,8 @@ defmodule ChordSubstituter.MusicTheory do
       1
   """
   def note_index(note) do
-    normalized_note = normalize_note(note)
+    normalized_note = get_enharmonic_equivalent(note)
     Enum.find_index(@note_names, &(&1 == normalized_note))
-  end
-
-  @doc """
-  Normalizes a chord quality by trimming whitespace and converting to lowercase.
-
-  ## Examples
-
-      iex> MusicTheory.normalize_quality("  MAJOR7  ")
-      "major7"
-
-      iex> MusicTheory.normalize_quality("Dom7")
-      "dom7"
-  """
-  def normalize_quality(quality) do
-    String.downcase(quality) |> String.trim()
   end
 
   @doc """

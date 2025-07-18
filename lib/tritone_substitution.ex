@@ -8,24 +8,9 @@ defmodule ChordSubstituter.TritoneSubstitution do
   """
 
   alias ChordSubstituter.Chord
+  alias ChordSubstituter.DominantChordData
   alias ChordSubstituter.MusicTheory
 
-  @dominant_qualities [
-    # Basic dominants
-    "7", "dom7", "dominant7", "dominant",
-    "9", "dom9", "dominant9",
-    "11", "dom11", "dominant11",
-    "13", "dom13", "dominant13",
-    # Altered dominants
-    "7#9", "7alt", "7b9", "9#11", "7#11", "13b9", "13#9", "13#11",
-    "13b9#11", "13#9#11", "7b13", "9b13", "11b13",
-    "dominant7_sharp9", "dominant7_flat9", "dominant9_sharp11",
-    "dominant7_sharp11", "dominant13_flat9", "dominant13_sharp9",
-    "dominant13_sharp11", "dominant13_flat9_sharp11", "dominant13_sharp9_sharp11",
-    "dominant7_flat13", "dominant9_flat13", "dominant11_flat13",
-    # Suspended dominants
-    "7sus2", "7sus4", "7sus", "9sus4", "9sus", "13sus2", "13sus4", "13sus"
-  ]
 
   @doc """
   Performs a tritone substitution on a dominant 7th chord.
@@ -83,9 +68,10 @@ defmodule ChordSubstituter.TritoneSubstitution do
   end
 
   defp validate_dominant_chord(%Chord{quality: quality}) do
-    normalized_quality = MusicTheory.normalize_quality(quality)
+    normalized_quality = Chord.normalize_quality(quality)
+    expanded_quality = DominantChordData.expand_quality_abbreviation(normalized_quality)
 
-    if normalized_quality in @dominant_qualities or normalized_quality == "" do
+    if DominantChordData.is_dominant?(normalized_quality) or DominantChordData.is_dominant?(expanded_quality) or normalized_quality == "" do
       {:ok, :valid}
     else
       {:error, "Tritone substitution only applies to dominant 7th chords"}
@@ -102,8 +88,12 @@ defmodule ChordSubstituter.TritoneSubstitution do
       "" -> "7"
       "dominant" -> " dominant7"
       other when other in ["7", "9", "11", "13"] -> other
-      other when other in @dominant_qualities -> " " <> other
-      other -> other
+      other ->
+        if DominantChordData.is_dominant?(other) do
+          " " <> other
+        else
+          other
+        end
     end
   end
 end

@@ -57,7 +57,7 @@ defmodule ChordSubstituter.Chord do
     %{match_exact: match_exact?} = Enum.into(options, @pitch_match_defaults)
     requisite_pitch_count = if match_exact?, do: 3, else: 2
 
-    normalized_pitches = Enum.map(pitches, &MusicTheory.normalize_note/1)
+    normalized_pitches = Enum.map(pitches, &MusicTheory.get_enharmonic_equivalent/1)
 
     unique_pitches = Enum.uniq(normalized_pitches)
 
@@ -78,8 +78,12 @@ defmodule ChordSubstituter.Chord do
     end)
   end
 
+  def normalize_quality(quality) do
+    String.downcase(quality) |> String.trim()
+  end
+
   defp get_intervals(quality) do
-    normalized_quality = MusicTheory.normalize_quality(quality)
+    normalized_quality = normalize_quality(quality)
     full_quality = ChordData.expand_quality_abbreviation(normalized_quality)
     ChordData.get_intervals(full_quality)
   end
