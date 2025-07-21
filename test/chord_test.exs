@@ -98,17 +98,17 @@ defmodule ChordSubstituter.ChordTest do
 
   describe "new/2" do
     test "creates chord struct with valid root and quality" do
-      chord = Chord.new("C", "major")
+      {:ok, chord} = Chord.new("C", "major")
       assert %Chord{root: "C", quality: "major", notes: ["C", "E", "G"]} = chord
     end
 
     test "creates chord struct with abbreviations" do
-      chord = Chord.new("F#", "m7")
+      {:ok, chord} = Chord.new("F#", "m7")
       assert %Chord{root: "F#", quality: "m7", notes: ["F#", "A", "C#", "E"]} = chord
     end
 
     test "handles enharmonic equivalents in root" do
-      chord = Chord.new("Db", "major")
+      {:ok, chord} = Chord.new("Db", "major")
       assert %Chord{root: "Db", quality: "major", notes: ["C#", "F", "G#"]} = chord
     end
 
@@ -123,17 +123,17 @@ defmodule ChordSubstituter.ChordTest do
 
   describe "new/1" do
     test "creates chord struct from chord string" do
-      chord = Chord.new("G major")
+      {:ok, chord} = Chord.new("G major")
       assert %Chord{root: "G", quality: "major", notes: ["G", "B", "D"]} = chord
     end
 
     test "creates chord struct from abbreviated chord string" do
-      chord = Chord.new("Am7")
+      {:ok, chord} = Chord.new("Am7")
       assert %Chord{root: "A", quality: "m7", notes: ["A", "C", "E", "G"]} = chord
     end
 
     test "handles chord string with spaces" do
-      chord = Chord.new("Bb major7")
+      {:ok, chord} = Chord.new("Bb major7")
       assert %Chord{root: "Bb", quality: "major7", notes: ["A#", "D", "F", "A"]} = chord
     end
 
@@ -264,7 +264,7 @@ defmodule ChordSubstituter.ChordTest do
     end
 
     test "chord creation with empty quality defaults to major" do
-      chord = Chord.new("C", "")
+      {:ok, chord} = Chord.new("C", "")
       assert %Chord{root: "C", quality: "", notes: ["C", "E", "G"]} = chord
     end
 
@@ -273,7 +273,6 @@ defmodule ChordSubstituter.ChordTest do
       result2 = Chord.find_chords_with_pitches("Db Eb Gb")
       assert length(result1) == length(result2)
 
-      # Both should find the same chords since they represent the same pitches
       normalized_result1 = Enum.sort(result1)
       normalized_result2 = Enum.sort(result2)
       assert normalized_result1 == normalized_result2
