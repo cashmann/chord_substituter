@@ -86,16 +86,19 @@ defmodule ChordSubstituter.DominantChordData do
   @doc """
   Returns the complete mapping of dominant chord qualities to their intervals.
   """
+  @spec interval_map() :: %{String.t() => [integer()]}
   def interval_map, do: @dominant_interval_map
 
   @doc """
   Returns the complete mapping of dominant chord abbreviations to their full names.
   """
+  @spec quality_abbreviations() :: %{String.t() => String.t()}
   def quality_abbreviations, do: @dominant_quality_abbreviations
 
   @doc """
   Returns a list of all valid dominant chord qualities.
   """
+  @spec dominant_qualities() :: [String.t()]
   def dominant_qualities, do: @dominant_qualities
 
   @doc """
@@ -112,6 +115,7 @@ defmodule ChordSubstituter.DominantChordData do
       iex> DominantChordData.get_intervals("major")
       {:error, "Not a dominant chord quality: major"}
   """
+  @spec get_intervals(String.t()) :: {:ok, [integer()]} | {:error, String.t()}
   def get_intervals(quality) do
     case Map.get(@dominant_interval_map, quality) do
       nil -> {:error, "Not a dominant chord quality: #{quality}"}
@@ -136,9 +140,8 @@ defmodule ChordSubstituter.DominantChordData do
       iex> DominantChordData.expand_quality_abbreviation("unknown")
       "unknown"
   """
-  def expand_quality_abbreviation(quality) do
-    Map.get(@dominant_quality_abbreviations, quality, quality)
-  end
+  @spec expand_quality_abbreviation(String.t()) :: String.t()
+  def expand_quality_abbreviation(quality), do: Map.get(@dominant_quality_abbreviations, quality, quality)
 
   @doc """
   Checks if a quality is a valid dominant chord quality.
@@ -154,7 +157,6 @@ defmodule ChordSubstituter.DominantChordData do
       iex> DominantChordData.is_dominant?("major")
       false
   """
-  def is_dominant?(quality) do
-    quality in @dominant_qualities
-  end
+  @spec is_dominant?(String.t()) :: boolean()
+  def is_dominant?(quality), do: quality in @dominant_qualities
 end

@@ -3,15 +3,22 @@ defmodule ChordSubstituter.Chord do
   alias ChordSubstituter.ChordData
   alias ChordSubstituter.MusicTheory
 
+  @type t :: %__MODULE__{
+    root: String.t() | nil,
+    quality: String.t() | nil,
+    notes: [String.t()] | nil
+  }
+
   defstruct root: nil, quality: nil, notes: nil
 
+  @spec new(String.t(), String.t()) :: {:ok, t()} | {:error, String.t()}
   def new(root, quality) do
-    with {:ok, notes} <- notes("#{root} #{quality}") do
-      %Chord{root: root, quality: quality, notes: notes}
-    else
-      {:error, reason} -> {:error, reason}
-    end
+    "#{root} #{quality}"
+    |> notes()
+    |> create_chord_struct(root, quality)
   end
+
+  @spec new(String.t()) :: {:ok, t()} | {:error, String.t()}
   def new(chord_string) do
     with {:ok, {root, quality}} <- parse_root_and_quality(chord_string) do
       new(root, quality)
@@ -21,14 +28,11 @@ defmodule ChordSubstituter.Chord do
   @doc """
   Returns the notes of a chord given a chord string (e.g., "C major", "D minor").
   """
+  @spec notes(String.t()) :: {:ok, [String.t()]} | {:error, String.t()}
   def notes(chord_string) do
-    with {:ok, {root, quality}} <- parse_root_and_quality(chord_string),
-         {:ok, intervals} <- get_intervals(quality),
-         {:ok, notes} <- build_notes(root, intervals) do
-      {:ok, notes}
-    else
-      {:error, reason} -> {:error, reason}
-    end
+    chord_string
+    |> parse_root_and_quality()
+    |> extract_intervals_and_build_notes()
   end
 
   def notes_from_chord_array(chord_array) do
@@ -68,87 +72,119 @@ defmodule ChordSubstituter.Chord do
     end
   end
 
+  @spec all_chords() :: [{String.t(), [String.t()]}]
   def all_chords do
-    Enum.flat_map(MusicTheory.note_names(), fn root ->
-      Enum.flat_map(ChordData.interval_map(), fn {quality, intervals} ->
-        {_, notes} = build_notes(root, intervals)
-
-        [{"#{root} #{quality}", notes}]
-      end)
-    end)
+    for root <- MusicTheory.note_names(),
+        {quality, intervals} <- ChordData.interval_map(),
+        {:ok, notes} <- [build_notes(root, intervals)] do
+      {"#{root} #{quality}", notes}
+    end
   end
 
-  def normalize_quality(quality) do
-    String.downcase(quality) |> String.trim()
-  end
+  @spec normalize_quality(String.t()) :: String.t()
+  def normalize_quality(quality), do: quality |> String.downcase() |> String.trim()
 
+  @spec get_intervals(String.t()) :: {:ok, [integer()]} | {:error, String.t()}
   defp get_intervals(quality) do
-    normalized_quality = normalize_quality(quality)
-    full_quality = ChordData.expand_quality_abbreviation(normalized_quality)
-    ChordData.get_intervals(full_quality)
+    quality
+    |> normalize_quality()
+    |> ChordData.expand_quality_abbreviation()
+    |> ChordData.get_intervals()
   end
 
-
-  defp note_index(note) when is_binary(note) do
-    MusicTheory.note_index(note)
-  end
-
+  @spec build_notes(String.t(), [integer()]) :: {:ok, [String.t()]} | {:error, String.t()}
   defp build_notes(root, intervals) do
-    case note_index(root) do
-      nil ->
-        {:error, "Unknown root note: #{root}"}
-
-      root_index ->
-        notes =
-          Enum.map(intervals, fn interval ->
-            Enum.at(MusicTheory.note_names(), rem(root_index + interval, length(MusicTheory.note_names())))
-          end)
-
-        {:ok, notes}
-    end
+    root
+    |> MusicTheory.note_index()
+    |> build_chord_notes(intervals)
   end
 
+  @spec parse_root_and_quality(String.t()) :: {:ok, {String.t(), String.t()}} | {:error, String.t()}
   defp parse_root_and_quality(string) do
-    case capture_chord_quality(string) do
-      %{"quality" => quality, "root" => root} ->
-        if MusicTheory.valid_note?(root) do
-          {:ok, {root, String.trim(quality)}}
-        else
-          {:error, "Unknown root note: #{root}"}
-        end
-
-      _ ->
-        {:error, "Invalid chord format"}
-    end
+    string
+    |> capture_chord_quality()
+    |> validate_parsed_chord()
   end
 
+  @spec parse_notes_from_string(String.t()) :: [String.t()]
   defp parse_notes_from_string(notes_string) do
     notes_string
     |> capture_notes()
     |> List.flatten()
   end
 
+  @spec capture_notes(String.t()) :: [[String.t()]]
   defp capture_notes(notes_string), do: Regex.scan(~r/([A-G][b#]?)/, notes_string, capture: :first)
 
+  @spec capture_chord_quality(String.t()) :: %{String.t() => String.t()} | nil
   defp capture_chord_quality(chord_string), do: Regex.named_captures(~r/^(?<root>[A-G][b#]?)(?<quality>.*)$/, chord_string)
 
+  @spec chords_matching_pitches([String.t()], boolean()) :: [String.t()]
   defp chords_matching_pitches(pitches, match_exact?) do
-    Enum.map(all_chords(), fn {name, notes} ->
-      match? = if match_exact?, do: pitches_match_exactly?(notes, pitches), else: pitches_matching?(pitches, notes)
-      if match?, do: name
-    end)
-    |> Enum.reject(&is_nil(&1))
+    match_function = if match_exact?, do: &pitches_match_exactly?/2, else: &pitches_matching?/2
+    find_matching_chords_recursive(all_chords(), pitches, match_function, [])
   end
 
-  defp pitches_matching?(input_pitches, chord_notes) do
-    Enum.all?(input_pitches, &Enum.member?(chord_notes, &1))
-  end
+  @spec pitches_matching?([String.t()], [String.t()]) :: boolean()
+  defp pitches_matching?(input_pitches, chord_notes), do: Enum.all?(input_pitches, &Enum.member?(chord_notes, &1))
 
+  @spec pitches_match_exactly?([String.t()], [String.t()]) :: boolean()
   defp pitches_match_exactly?(chord_notes, input_pitches) do
-    if (length(chord_notes) == length(input_pitches)) do
-      pitches_matching?(input_pitches, chord_notes)
+    length(chord_notes) == length(input_pitches) and pitches_matching?(input_pitches, chord_notes)
+  end
+
+  @spec create_chord_struct({:ok, [String.t()]} | {:error, String.t()}, String.t(), String.t()) :: {:ok, t()} | {:error, String.t()}
+  defp create_chord_struct({:ok, notes}, root, quality), do: {:ok, %Chord{root: root, quality: quality, notes: notes}}
+  defp create_chord_struct({:error, reason}, _root, _quality), do: {:error, reason}
+
+  @spec extract_intervals_and_build_notes({:ok, {String.t(), String.t()}} | {:error, String.t()}) :: {:ok, [String.t()]} | {:error, String.t()}
+  defp extract_intervals_and_build_notes({:ok, {root, quality}}) do
+    quality
+    |> get_intervals()
+    |> build_notes_from_intervals(root)
+  end
+  defp extract_intervals_and_build_notes({:error, reason}), do: {:error, reason}
+
+  @spec build_notes_from_intervals({:ok, [integer()]} | {:error, String.t()}, String.t()) :: {:ok, [String.t()]} | {:error, String.t()}
+  defp build_notes_from_intervals({:ok, intervals}, root), do: build_notes(root, intervals)
+  defp build_notes_from_intervals({:error, reason}, _root), do: {:error, reason}
+
+
+  @spec build_chord_notes(integer() | nil, [integer()]) :: {:ok, [String.t()]} | {:error, String.t()}
+  defp build_chord_notes(nil, _intervals), do: {:error, "Unknown root note"}
+  defp build_chord_notes(root_index, intervals) do
+    notes = build_notes_recursive(intervals, root_index, [])
+    {:ok, notes}
+  end
+
+  @spec build_notes_recursive([integer()], integer(), [String.t()]) :: [String.t()]
+  defp build_notes_recursive([], _root_index, acc), do: Enum.reverse(acc)
+  defp build_notes_recursive([interval | rest], root_index, acc) do
+    note = calculate_note_at_interval(root_index, interval)
+    build_notes_recursive(rest, root_index, [note | acc])
+  end
+
+  @spec calculate_note_at_interval(integer(), integer()) :: String.t()
+  defp calculate_note_at_interval(root_index, interval) do
+    note_names = MusicTheory.note_names()
+    target_index = rem(root_index + interval, length(note_names))
+    Enum.at(note_names, target_index)
+  end
+
+  @spec validate_parsed_chord(%{String.t() => String.t()} | nil) :: {:ok, {String.t(), String.t()}} | {:error, String.t()}
+  defp validate_parsed_chord(nil), do: {:error, "Invalid chord format"}
+  defp validate_parsed_chord(%{"quality" => quality, "root" => root}) do
+    if MusicTheory.valid_note?(root) do
+      {:ok, {root, String.trim(quality)}}
     else
-      false
+       {:error, "Unknown root note: #{root}"}
     end
+  end
+
+  @spec find_matching_chords_recursive([{String.t(), [String.t()]}], [String.t()], function(), [String.t()]) :: [String.t()]
+  defp find_matching_chords_recursive([], _pitches, _match_function, acc), do: Enum.reverse(acc)
+  defp find_matching_chords_recursive([{name, notes} | rest], pitches, match_function, acc) do
+    new_acc = if match_function.(pitches, notes), do: [name | acc], else: acc
+    find_matching_chords_recursive(rest, pitches, match_function, new_acc)
   end
 end

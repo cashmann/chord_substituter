@@ -133,24 +133,31 @@ defmodule ChordSubstituter.ChordData do
     "maj13sus" => "maj13_sus4",
   }
 
-  def interval_map do
-    Map.merge(@interval_map, DominantChordData.interval_map())
-  end
+  @spec interval_map() :: %{String.t() => [integer()]}
+  def interval_map, do: Map.merge(@interval_map, DominantChordData.interval_map())
 
-  def quality_abbreviations do
-    Map.merge(@quality_abbreviations, DominantChordData.quality_abbreviations())
-  end
+  @spec quality_abbreviations() :: %{String.t() => String.t()}
+  def quality_abbreviations, do: Map.merge(@quality_abbreviations, DominantChordData.quality_abbreviations())
 
+  @spec get_intervals(String.t()) :: {:ok, [integer()]} | {:error, String.t()}
   def get_intervals(quality) do
-    quality = if quality == "", do: "major", else: quality
+    quality
+    |> normalize_empty_quality()
+    |> fetch_intervals()
+  end
 
+  @spec expand_quality_abbreviation(String.t()) :: String.t()
+  def expand_quality_abbreviation(quality), do: Map.get(quality_abbreviations(), quality, quality)
+
+  @spec normalize_empty_quality(String.t()) :: String.t()
+  defp normalize_empty_quality(""), do: "major"
+  defp normalize_empty_quality(quality), do: quality
+
+  @spec fetch_intervals(String.t()) :: {:ok, [integer()]} | {:error, String.t()}
+  defp fetch_intervals(quality) do
     case Map.get(interval_map(), quality) do
       nil -> {:error, "Unknown chord quality: #{quality}"}
       intervals -> {:ok, intervals}
     end
-  end
-
-  def expand_quality_abbreviation(quality) do
-    Map.get(quality_abbreviations(), quality, quality)
   end
 end

@@ -29,17 +29,11 @@ defmodule ChordSubstituter.TritoneSubstitution do
       iex> TritoneSubstitution.substitute("C major")
       {:error, "Tritone substitution only applies to dominant 7th chords"}
   """
+  @spec substitute(String.t()) :: {:ok, String.t()} | {:error, String.t()}
   def substitute(chord_string) do
-    case Chord.new(chord_string) do
-      %Chord{} = chord ->
-        with {:ok, _} <- validate_dominant_chord(chord),
-             {:ok, substitute_root} <- calculate_tritone_substitute(chord.root) do
-          {:ok, "#{substitute_root}#{format_quality_suffix(chord.quality)}"}
-        else
-          {:error, reason} -> {:error, reason}
-        end
-      {:error, reason} -> {:error, reason}
-    end
+    chord_string
+    |> Chord.new()
+    |> validate_and_substitute()
   end
 
   @doc """
@@ -56,44 +50,71 @@ defmodule ChordSubstituter.TritoneSubstitution do
       iex> TritoneSubstitution.substitute_with_notes("F# dominant7")
       {:ok, {"C dominant7", ["C", "E", "G", "A#"]}}
   """
+  @spec substitute_with_notes(String.t()) :: {:ok, {String.t(), [String.t()]}} | {:error, String.t()}
   def substitute_with_notes(chord_string) do
-    case substitute(chord_string) do
-      {:ok, substitute_chord_name} ->
-        case Chord.notes(substitute_chord_name) do
-          {:ok, notes} -> {:ok, {substitute_chord_name, notes}}
-          {:error, reason} -> {:error, reason}
-        end
+    chord_string
+    |> substitute()
+    |> build_substitute_with_notes()
+  end
+
+  @spec validate_dominant_chord(Chord.t()) :: {:ok, :valid} | {:error, String.t()}
+  defp validate_dominant_chord(%Chord{quality: quality}) do
+    quality
+    |> Chord.normalize_quality()
+    |> is_valid_dominant_quality?()
+    |> case do
+      true -> {:ok, :valid}
+      false -> {:error, "Tritone substitution only applies to dominant 7th chords"}
+    end
+  end
+
+  @spec calculate_tritone_substitute(String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  defp calculate_tritone_substitute(root), do: MusicTheory.transpose_note(root, 6)
+
+  @spec format_quality_suffix(String.t()) :: String.t()
+  defp format_quality_suffix(quality) do
+    quality
+    |> String.trim()
+    |> do_format_quality_suffix()
+  end
+
+  @spec do_format_quality_suffix(String.t()) :: String.t()
+  defp do_format_quality_suffix(""), do: "7"
+  defp do_format_quality_suffix("dominant"), do: " dominant7"
+  defp do_format_quality_suffix(quality) when quality in ["7", "9", "11", "13"], do: quality
+  defp do_format_quality_suffix(quality) do
+    if DominantChordData.is_dominant?(quality) do
+      " " <> quality
+    else
+      quality
+    end
+  end
+
+  @spec validate_and_substitute({:ok, Chord.t()} | {:error, String.t()}) :: {:ok, String.t()} | {:error, String.t()}
+  defp validate_and_substitute({:ok, chord}) do
+    with {:ok, _} <- validate_dominant_chord(chord),
+         {:ok, substitute_root} <- calculate_tritone_substitute(chord.root) do
+      {:ok, "#{substitute_root}#{format_quality_suffix(chord.quality)}"}
+    end
+  end
+  defp validate_and_substitute({:error, reason}), do: {:error, reason}
+
+  @spec build_substitute_with_notes({:ok, String.t()} | {:error, String.t()}) :: {:ok, {String.t(), [String.t()]}} | {:error, String.t()}
+  defp build_substitute_with_notes({:ok, substitute_chord_name}) do
+    substitute_chord_name
+    |> Chord.notes()
+    |> case do
+      {:ok, notes} -> {:ok, {substitute_chord_name, notes}}
       {:error, reason} -> {:error, reason}
     end
   end
+  defp build_substitute_with_notes({:error, reason}), do: {:error, reason}
 
-  defp validate_dominant_chord(%Chord{quality: quality}) do
-    normalized_quality = Chord.normalize_quality(quality)
+  @spec is_valid_dominant_quality?(String.t()) :: boolean()
+  defp is_valid_dominant_quality?(normalized_quality) do
     expanded_quality = DominantChordData.expand_quality_abbreviation(normalized_quality)
-
-    if DominantChordData.is_dominant?(normalized_quality) or DominantChordData.is_dominant?(expanded_quality) or normalized_quality == "" do
-      {:ok, :valid}
-    else
-      {:error, "Tritone substitution only applies to dominant 7th chords"}
-    end
-  end
-
-  defp calculate_tritone_substitute(root) do
-    MusicTheory.transpose_note(root, 6)
-  end
-
-  defp format_quality_suffix(quality) do
-    trimmed = String.trim(quality)
-    case trimmed do
-      "" -> "7"
-      "dominant" -> " dominant7"
-      other when other in ["7", "9", "11", "13"] -> other
-      other ->
-        if DominantChordData.is_dominant?(other) do
-          " " <> other
-        else
-          other
-        end
-    end
+    DominantChordData.is_dominant?(normalized_quality) or
+    DominantChordData.is_dominant?(expanded_quality) or
+    normalized_quality == ""
   end
 end
